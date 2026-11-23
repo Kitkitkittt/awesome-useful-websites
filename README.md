@@ -6,6 +6,8 @@
 
 Explore the internet's hidden gems with this list of awesome useful websites!
 
+For bounded catalog changes, see the [swarm-ready handoff](SWARM_READY.md).
+
 <br>
 
 Most of these websites are gathered from:
