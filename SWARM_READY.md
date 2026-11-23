@@ -41,7 +41,59 @@ The base above is an inspection snapshot, not a permanent working branch. Refres
 
 ## Verification starting point
 
-No executable acceptance command was established by this bounded source inspection. Read `README.md` and record the narrowest existing check before implementation. Do not invent a `test` command or infer that the repository has no tests from this gap. For a documentation-only task, check links, factual source anchors and whitespace; do not build unrelated application code.
+From the repository root, run this catalog check with Git and Python 3. It reads the entries between `Tools` and `Contributing` in `README.md`, checks the leading HTTP(S) link in each entry, and rejects new or increased exact-URL duplicates. It preserves historical duplicates and accepts the existing non-bulleted link under `C++`. Use `CATALOG_BASE=HEAD` for uncommitted changes; when reviewing a committed candidate, set it to the locally available pre-change commit instead.
+
+```sh
+GIT_NO_LAZY_FETCH=1 CATALOG_BASE=HEAD python3 -IBS - <<'PY'
+import os
+import re
+import subprocess
+from collections import defaultdict
+from pathlib import Path
+from urllib.parse import urlsplit
+
+
+def catalog(text):
+    lines = text.splitlines()
+    try:
+        start = lines.index("## Tools") + 1
+        end = lines.index("# Contributing", start)
+    except ValueError:
+        raise SystemExit("README.md: missing Tools or Contributing catalog boundary")
+    destinations = defaultdict(list)
+    for number, row in enumerate(lines[start:end], start + 1):
+        if not row.strip() or re.fullmatch(r"#{2,6} .+|<br>", row):
+            continue
+        match = re.match(r"(?:- )?\[([^\]]+)\]\(([^()\s]+)\)", row)
+        if not match or not match[1].strip():
+            raise SystemExit(f"README.md:{number}: expected a named catalog link")
+        try:
+            url = urlsplit(match[2])
+            valid = url.scheme in {"http", "https"} and url.hostname
+        except ValueError:
+            valid = False
+        if not valid:
+            raise SystemExit(f"README.md:{number}: expected an HTTP(S) URL with a host")
+        destinations[match[2]].append(number)
+    if not destinations:
+        raise SystemExit("README.md: catalog is empty")
+    return destinations
+
+
+base = subprocess.check_output(
+    ["git", "cat-file", "blob", f"{os.environ['CATALOG_BASE']}:README.md"],
+    encoding="utf-8", timeout=5,
+)
+before = catalog(base)
+after = catalog(Path("README.md").read_text(encoding="utf-8"))
+increases = [rows for url, rows in after.items() if len(rows) > max(1, len(before.get(url, ())))]
+if increases:
+    raise SystemExit(f"README.md: new or increased exact-URL duplicates at line groups {increases}")
+print(f"Checked {sum(map(len, after.values()))} catalog entries; no new exact-URL duplicates.")
+PY
+```
+
+Expect exit 0 and an entry count on success. This is an offline text check, not a link-availability or safety verdict: do not visit linked sites, fetch badges, or run linked code. Review any changed descriptions and table-of-contents anchors separately.
 
 ## Required handoff result
 
